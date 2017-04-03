@@ -8,12 +8,15 @@ ENV GUNICORN_CMD_ARGS \
 	--group archivematica \
 	--bind 0.0.0.0:8000 \
 	--workers 4 \
+	--worker-class gevent \
 	--timeout 172800 \
 	--chdir /src/storage_service \
 	--access-logfile - \
 	--error-logfile - \
 	--log-level info \
 	--reload \
+        # We can't combine gevent + inotify, see https://github.com/benoitc/gunicorn/issues/1494 \
+	--reload-engine poll \
 	--name archivematica-storage-service
 
 # OS dependencies
