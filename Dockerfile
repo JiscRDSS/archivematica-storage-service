@@ -33,8 +33,8 @@ RUN pip install -r /src/requirements/production.txt -r /src/requirements/test.tx
 ADD ./ /src/
 
 RUN set -ex \
-	&& groupadd -r archivematica \
-	&& useradd -r -g archivematica archivematica
+	&& groupadd --gid 333 --system archivematica \
+	&& useradd --uid 333 --gid 333 --system archivematica
 
 RUN set -ex \
 	&& internalDirs=' \
