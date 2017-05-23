@@ -1,28 +1,27 @@
 """Development settings and globals."""
 from __future__ import absolute_import
 
-
-from os.path import join, normpath
-
-from .base import *
+from os import environ
 
 import dj_database_url
 
+from .base import *  # noqa: F401, F403
+from .base import get_env_variable  # To make he linter happy
 
-########## DEBUG CONFIGURATION
+
+# ######## DEBUG CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#debug
 DEBUG = True
+# ######## END DEBUG CONFIGURATION
 
-########## END DEBUG CONFIGURATION
 
-
-########## EMAIL CONFIGURATION
+# ######## EMAIL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-backend
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-########## END EMAIL CONFIGURATION
+# ######## END EMAIL CONFIGURATION
 
 
-########## DATABASE CONFIGURATION
+# ######## DATABASE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#databases
 DATABASES = {}
 if 'SS_DB_URL' in environ:
@@ -36,17 +35,17 @@ else:
         'HOST': get_env_variable('SS_DB_HOST'),  # Set to empty string forr localhost. Not used with sqlite3.
         'PORT': '',  # Set to empty string for default. Not used with sqlite3.
     }
-########## END DATABASE CONFIGURATION
+# ######## END DATABASE CONFIGURATION
 
 
-########## CACHE CONFIGURATION
+# ######## CACHE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#caches
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
     }
 }
-########## END CACHE CONFIGURATION
+# ######## END CACHE CONFIGURATION
 
 
 # ########## TOOLBAR CONFIGURATION

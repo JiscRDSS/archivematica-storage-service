@@ -1,7 +1,10 @@
 """Production settings and globals."""
 from __future__ import absolute_import
+
 from os import environ
-from .base import *
+
+from .base import *  # noqa: F401, F403
+from .base import get_env_variable  # To make he linter happy
 
 # Normally you should not import ANYTHING from Django directly
 # into your settings, but ImproperlyConfigured is an exception.
@@ -19,7 +22,12 @@ def get_env_setting(setting):
         raise ImproperlyConfigured(error_msg)
 
 
-########## EMAIL CONFIGURATION
+# ######## HOST CONFIGURATION
+# See: https://docs.djangoproject.com/en/1.5/releases/1.5/#allowed-hosts-required-in-production
+ALLOWED_HOSTS = ['*']
+# ######## END HOST CONFIGURATION
+
+# ######## EMAIL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#email-backend
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
@@ -43,9 +51,9 @@ EMAIL_USE_TLS = True
 
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#server-email
 SERVER_EMAIL = EMAIL_HOST_USER
-########## END EMAIL CONFIGURATION
+# ######## END EMAIL CONFIGURATION
 
-########## DATABASE CONFIGURATION
+# ######## DATABASE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#databases
 DATABASES = {}
 if 'SS_DB_URL' in environ:
@@ -59,14 +67,13 @@ else:
         'HOST': get_env_variable('SS_DB_HOST'),  # Set to empty string forr localhost. Not used with sqlite3.
         'PORT': '',  # Set to empty string for default. Not used with sqlite3.
     }
-########## END DATABASE CONFIGURATION
+# ######## END DATABASE CONFIGURATION
 
-
-########## CACHE CONFIGURATION
+# ######## CACHE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#caches
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
     }
 }
-########## END CACHE CONFIGURATION
+# ######## END CACHE CONFIGURATION
