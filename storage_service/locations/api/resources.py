@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import urllib
 
@@ -12,6 +13,8 @@ import urllib
 from django.conf import settings
 from django.conf.urls import url
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
+from django.core.urlresolvers import reverse
+from django.http import HttpResponseRedirect
 from django.forms.models import model_to_dict
 from django.utils.translation import ugettext as _
 
@@ -28,6 +31,7 @@ from tastypie.validation import CleanedDataFormValidation
 from tastypie.utils import trailing_slash
 
 # This project, alphabetical
+from administration.models import Settings
 from common import utils
 from locations.api.sword import views as sword_views
 
@@ -259,10 +263,10 @@ class LocationResource(ModelResource):
 
     def prepend_urls(self):
         return [
+            url(r"^(?P<resource_name>%s)/default/(?P<purpose>[A-Z]{2})%s$" % (self._meta.resource_name, trailing_slash()), self.wrap_view('default'), name="default_location"),
             url(r"^(?P<resource_name>%s)/(?P<%s>\w[\w/-]*)/browse%s$" % (self._meta.resource_name, self._meta.detail_uri_name, trailing_slash()), self.wrap_view('browse'), name="browse"),
             # FEDORA/SWORD2 endpoints
             url(r"^(?P<resource_name>%s)/(?P<%s>\w[\w/-]*)/sword/collection%s$" % (self._meta.resource_name, self._meta.detail_uri_name, trailing_slash()), self.wrap_view('sword_collection'), name="sword_collection"),
-
         ]
 
     def decode_path(self, path):
@@ -271,6 +275,26 @@ class LocationResource(ModelResource):
     def get_objects(self, space, path):
         message = _('This method should be accessed via a versioned subclass')
         raise NotImplementedError(message)
+
+    def default(self, request, **kwargs):
+        """ Redirects to the default location for the given purpose. """
+        # Tastypie API checks
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        self.throttle_check(request)
+        self.log_throttled_access(request)
+
+        try:
+            name = 'default_{}_location'.format(kwargs['purpose'])
+            uuid = Settings.objects.get(name=name).value
+        except (Settings.DoesNotExist, KeyError):
+            return http.HttpNotFound('Default location not defined for this purpose.')
+
+        return HttpResponseRedirect(reverse('api_dispatch_detail', kwargs={
+            'api_name': 'v2',
+            'resource_name': 'location',
+            'uuid': uuid,
+        }))
 
     @_custom_endpoint(expected_methods=['get'])
     def browse(self, request, bundle, **kwargs):
@@ -412,6 +436,8 @@ class PackageResource(ModelResource):
     current_full_path = fields.CharField(attribute='full_path', readonly=True)
     related_packages = fields.ManyToManyField('self', 'related_packages', null=True)
 
+    default_location_regex = re.compile(r'\/api\/v2\/location\/default\/(?P<purpose>[A-Z]{2})\/?')
+
     class Meta:
         queryset = Package.objects.all()
         authentication = MultiAuthentication(BasicAuthentication(), ApiKeyAuthentication(), SessionAuthentication())
@@ -464,6 +490,34 @@ class PackageResource(ModelResource):
         """Customize serialization of misc_attributes."""
         # Serialize JSONField as dict, not as repr of a dict
         return bundle.obj.misc_attributes
+
+    def hydrate_current_location(self, bundle):
+        try:
+            current_location = bundle.data['current_location']
+        except KeyError:
+            return bundle
+        matches = self.default_location_regex.match(current_location)
+        LOGGER.debug("current_location=%s", current_location)
+        try:
+            purpose = matches.group('purpose')
+        except AttributeError:
+            LOGGER.debug("attribute error")
+            return bundle
+        try:
+            name = 'default_{}_location'.format(purpose)
+            uuid = Settings.objects.get(name=name).value
+        except (Settings.DoesNotExist, KeyError):
+            LOGGER.debug("setting does not exist name = %s", name)
+            return bundle
+
+        a = reverse('api_dispatch_detail', kwargs={
+            'api_name': 'v2',
+            'resource_name': 'location',
+            'uuid': uuid,
+        })
+        LOGGER.debug("---> %s", a)
+        bundle.data['current_location'] = a
+        return bundle
 
     def obj_create(self, bundle, **kwargs):
         bundle = super(PackageResource, self).obj_create(bundle, **kwargs)
