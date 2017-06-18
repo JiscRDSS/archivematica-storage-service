@@ -3,6 +3,7 @@ FROM python:2.7
 ENV DEBIAN_FRONTEND noninteractive
 ENV DJANGO_SETTINGS_MODULE storage_service.settings.production
 ENV PYTHONUNBUFFERED 1
+ENV PYTHONPATH /src/storage_service
 ENV SS_GUNICORN_BIND 0.0.0.0:8000
 ENV SS_GUNICORN_CHDIR /src/storage_service
 ENV SS_GUNICORN_ACCESSLOG -
@@ -14,6 +15,7 @@ RUN set -ex \
 	&& apt-get update \
 	&& apt-get install -y --no-install-recommends \
 		gettext \
+		p7zip-full \
 		rsync \
 		unar \
 	&& rm -rf /var/lib/apt/lists/*
@@ -46,4 +48,5 @@ RUN env \
 		/src/storage_service/manage.py collectstatic --noinput --clear
 
 EXPOSE 8000
+WORKDIR /src/storage_service
 ENTRYPOINT /usr/local/bin/gunicorn --config=/etc/archivematica/storage-service.gunicorn-config.py storage_service.wsgi:application
