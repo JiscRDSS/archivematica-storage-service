@@ -6,8 +6,9 @@ from os import environ
 from .base import *  # noqa: F401, F403
 
 # ######## HOST CONFIGURATION
-# See: https://docs.djangoproject.com/en/1.5/releases/1.5/#allowed-hosts-required-in-production
-ALLOWED_HOSTS = ['*']
+# See:
+# https://docs.djangoproject.com/en/1.5/releases/1.5/#allowed-hosts-required-in-production
+ALLOWED_HOSTS = get_env_variable('DJANGO_ALLOWED_HOSTS').split(',')
 # ######## END HOST CONFIGURATION
 
 # ######## EMAIL CONFIGURATION
@@ -54,3 +55,10 @@ CACHES = {
     }
 }
 # ######## END CACHE CONFIGURATION
+
+
+# ######## SECRET CONFIGURATION
+# See: https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
+# Note: This key should only be used for development and testing.
+SECRET_KEY = get_env_variable('DJANGO_SECRET_KEY')
+# ######## END SECRET CONFIGURATION

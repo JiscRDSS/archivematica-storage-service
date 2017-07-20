@@ -43,8 +43,6 @@ USER archivematica
 
 RUN env \
 	DJANGO_SETTINGS_MODULE=storage_service.settings.local \
-	DJANGO_SECRET_KEY=12345 \
-	DJANGO_ALLOWED_HOSTS=127.0.0.1 \
 	SS_DB_URL=mysql://ne:ver@min/d \
 		/src/storage_service/manage.py collectstatic --noinput --clear
 

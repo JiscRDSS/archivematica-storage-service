@@ -1,3 +1,5 @@
+# flake8: noqa
+
 """Common settings and globals."""
 
 from os import environ
@@ -142,14 +144,14 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 # ######## SECRET CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#secret-key
 # Note: This key should only be used for development and testing.
-SECRET_KEY = get_env_variable('DJANGO_SECRET_KEY')
+SECRET_KEY = "SECRET_KEY"
 # ######## END SECRET CONFIGURATION
 
 
 # ######## SITE CONFIGURATION
 # Hosts/domain names that are valid for this site
 # See https://docs.djangoproject.com/en/1.5/ref/settings/#allowed-hosts
-ALLOWED_HOSTS = get_env_variable('DJANGO_ALLOWED_HOSTS').split(',')
+ALLOWED_HOSTS = ['*']
 # ######## END SITE CONFIGURATION
 
 
