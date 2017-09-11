@@ -352,7 +352,15 @@ ALLOW_USER_EDITS = True
 
 
 def is_true(env_str):
-    return env_str.lower() in ['true', 'yes', 'on', '1']
+    if env_str:
+        return env_str.lower() in ['true', 'yes', 'on', '1']
+    return False
+
+def to_int(env_str):
+    try:
+        return int(env_str)
+    except (TypeError, ValueError):
+        return None
 
 SHIBBOLETH_AUTHENTICATION = is_true(environ.get('SS_SHIBBOLETH_AUTHENTICATION', ''))
 if SHIBBOLETH_AUTHENTICATION:
