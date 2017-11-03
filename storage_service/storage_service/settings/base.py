@@ -351,6 +351,9 @@ WSGI_APPLICATION = '%s.wsgi.application' % SITE_NAME
 ALLOW_USER_EDITS = True
 
 
+PIPELINE_REMOTE_NAME = environ.get('SS_PIPELINE_REMOTE_NAME', '')
+
+
 def is_true(env_str):
     if env_str:
         return env_str.lower() in ['true', 'yes', 'on', '1']

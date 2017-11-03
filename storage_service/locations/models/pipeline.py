@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 # stdlib, alphabetical
 import logging
+from urlparse import urlparse, urlunparse
 
 # Core Django, alphabetical
 from django.core import validators
@@ -140,8 +141,10 @@ class Pipeline(models.Model):
     # HTTP API CALLS
 
     def _request_api(self, method, path, fields=None):
-        url = 'http://{}/api/{}'.format(
-            self.remote_name,
+        # Add http scheme if no scheme is present.
+        remote_name = urlunparse(urlparse(self.remote_name, scheme='http'))
+        url = '{}api/{}'.format(
+            remote_name,
             path.lstrip('/'),
         )
         data = {
