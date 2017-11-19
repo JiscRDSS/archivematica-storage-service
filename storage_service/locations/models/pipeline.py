@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 # stdlib, alphabetical
 import logging
-from urlparse import urlparse, urlunparse
 
 # Core Django, alphabetical
 from django.core import validators

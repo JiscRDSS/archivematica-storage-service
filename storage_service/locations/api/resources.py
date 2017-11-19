@@ -133,17 +133,15 @@ class PipelineResource(ModelResource):
         bundle = super(PipelineResource, self).obj_create(bundle, **kwargs)
         bundle.obj.enabled = not utils.get_setting('pipelines_disabled', False)
         create_default_locations = bundle.data.get('create_default_locations', False)
-        # Try to guess Pipeline's IP, if doing default setup
-        if create_default_locations:
-            # Use configured version of remote dashboard URL,
-            # or try to infer it if not configured
-            remote_name = (
+
+        # Try to guess Pipeline's IP if remote_name is undefined
+        if bundle.data.get('remote_name') is None:
+            ip = (
                 settings.PIPELINE_REMOTE_NAME or
                 bundle.request.META.get('REMOTE_ADDR') or
                 None
             )
-
-            bundle.obj.remote_name = remote_name
+            bundle.obj.remote_name = ip
 
         shared_path = bundle.data.get('shared_path', None)
         bundle.obj.save(create_default_locations, shared_path)
