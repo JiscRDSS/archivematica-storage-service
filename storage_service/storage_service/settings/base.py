@@ -398,3 +398,11 @@ try:
         environ.get('SS_BAG_VALIDATION_NO_PROCESSES', 1))
 except ValueError:
     BAG_VALIDATION_NO_PROCESSES = 1
+
+# SS uses a Python HTTP library called requests. If this setting is set to True,
+# we will skip the SSL certificate verification process. Read more here:
+# http://docs.python-requests.org/en/master/user/advanced/#ssl-cert-verification
+# This setting is honored in:
+# - locations.models.pipeline
+# - locations.models.dspace
+INSECURE_SKIP_VERIFY = is_true(environ.get('SS_INSECURE_SKIP_VERIFY', ''))
