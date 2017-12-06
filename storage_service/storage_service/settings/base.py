@@ -60,23 +60,6 @@ MANAGERS = ADMINS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
-# ######## DATABASE CONFIGURATION
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#databases
-DATABASES = {}
-if 'SS_DB_URL' in environ:
-    DATABASES['default'] = dj_database_url.config(env='SS_DB_URL', conn_max_age=600)
-else:
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',  # Add 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
-        'NAME': get_env_variable('SS_DB_NAME'),
-        'USER': get_env_variable('SS_DB_USER'),  # Not used with sqlite3.
-        'PASSWORD': get_env_variable('SS_DB_PASSWORD'),  # Not used with sqlite3.
-        'HOST': get_env_variable('SS_DB_HOST'),  # Set to empty string forr localhost. Not used with sqlite3.
-        'PORT': '',  # Set to empty string for default. Not used with sqlite3.
-    }
-# ######## END DATABASE CONFIGURATION
-
-
 # ######## GENERAL CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#time-zone
 TIME_ZONE = 'America/Los_Angeles'
