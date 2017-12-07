@@ -1,16 +1,28 @@
 ---
 
 dist: trusty
-sudo: required
-
+sudo: false
 language: python
 
+addons:
+  apt:
+    packages:
+      - python-pip
+      - p7zip-full
+      - unar
+
+cache:
+  - pip
+
 before_install:
-  - sudo apt-get -qq update
-  - sudo apt-get install -y unar p7zip-full
+  - pip install tox
+
+install: true
 
 before_script:
-  - pip install tox
+  # Needed by test_duracloud.py
+  - sudo mkdir -p /var/archivematica/storage_service
+  - sudo chown -R $USER /var/archivematica/storage_service
 
 script: tox
 
