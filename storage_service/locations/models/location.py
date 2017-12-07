@@ -140,6 +140,7 @@ def set_default_location_pre_save(sender, instance, raw, using, update_fields, *
             name='default_{}_location'.format(old.purpose),
             value=old.uuid).delete()
 
+
 @receiver(models.signals.post_save, sender=Location)
 def set_default_location_post_save(sender, instance, created, raw, using, update_fields, **kwargs):
     name = 'default_{}_location'.format(instance.purpose)
