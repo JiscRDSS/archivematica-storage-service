@@ -15,7 +15,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from common import decorators
 from common import utils
-from .models import Callback, Space, Location, Package, Event, Pipeline, LocationPipeline, StorageException, FixityLog
+from common import gpgutils
+from .models import Callback, Space, Location, Package, Event, Pipeline, LocationPipeline, StorageException, FixityLog, GPG
 from . import forms
 from .constants import PROTOCOL
 
@@ -238,6 +239,9 @@ def aip_reingest(request, package_uuid):
     except Package.DoesNotExist:
         messages.warning(request, _('Package with UUID %(uuid)s does not exist.') % {'uuid': package_uuid})
         return redirect(next_url)
+    if package.replicated_package:
+        messages.warning(request, _('Package %(uuid)s is a replica and replicas cannot be re-ingested.') % {'uuid': package_uuid})
+        return redirect(next_url)
     form = forms.ReingestForm(request.POST or None)
     if form.is_valid():
         pipeline = form.cleaned_data['pipeline']
@@ -265,7 +269,11 @@ def location_edit(request, space_uuid, location_uuid=None):
     else:
         action = _("Create Location")
         location = None
-    form = forms.LocationForm(request.POST or None, space_protocol=space.access_protocol, instance=location)
+    form = forms.LocationForm(
+        request.POST or None,
+        space_protocol=space.access_protocol,
+        instance=location)
+
     if form.is_valid():
         location = form.save(commit=False)
         location.space = space
@@ -274,7 +282,8 @@ def location_edit(request, space_uuid, location_uuid=None):
         for pipeline in form.cleaned_data['pipeline']:
             LocationPipeline.objects.get_or_create(
                 location=location, pipeline=pipeline)
-
+        for replicator_loc in form.cleaned_data['replicators']:
+            location.replicators.add(replicator_loc)
         # Delete relationships between the location and pipelines not in the form
         to_delete = LocationPipeline.objects.filter(location=location).exclude(
             pipeline__in=list(form.cleaned_data['pipeline']))
@@ -416,12 +425,24 @@ def space_detail(request, uuid):
 
     child_dict_raw = model_to_dict(child, PROTOCOL[space.access_protocol]['fields']or [''])
     child_dict = {
-        child._meta.get_field(field).verbose_name: value
+        child._meta.get_field(field).verbose_name:
+        get_child_space_value(value, field, child)
         for field, value in child_dict_raw.items()
     }
     space.child = child_dict
     locations = Location.objects.filter(space=space)
     return render(request, 'locations/space_detail.html', locals())
+
+
+def get_child_space_value(value, field, child):
+    """If the child space ``child`` is a GPG instance, and the field is key, we
+    return a human-readable representation of the GPG key instead of its
+    fingerprint: the name of the first user in its uids list.
+    """
+    if field == 'key' and isinstance(child, GPG):
+        key = gpgutils.get_gpg_key(value)
+        return ' '.join(key['uids'][0].split()[:-1])
+    return value
 
 
 def space_create(request):

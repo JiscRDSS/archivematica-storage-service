@@ -284,7 +284,11 @@ class LocationResource(ModelResource):
         raise NotImplementedError(message)
 
     def default(self, request, **kwargs):
-        """ Redirects to the default location for the given purpose. """
+        """Redirects to the default location for the given purpose.
+
+        This function is not using the `_custom_endpoint` decorator because it
+        is not bound to an object.
+        """
         # Tastypie API checks
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
@@ -460,6 +464,11 @@ class PackageResource(ModelResource):
     current_full_path = fields.CharField(attribute='full_path', readonly=True)
     related_packages = fields.ManyToManyField('self', 'related_packages', null=True)
 
+    replicated_package = fields.ForeignKey(
+        'self', 'replicated_package', null=True, blank=True, readonly=True)
+    replicas = fields.ManyToManyField(
+        'self', 'replicas', null=True, blank=True, readonly=True)
+
     default_location_regex = re.compile(r'\/api\/v2\/location\/default\/(?P<purpose>[A-Z]{2})\/?')
 
     class Meta:
@@ -473,7 +482,9 @@ class PackageResource(ModelResource):
         # that name.
         resource_name = 'file'
 
-        fields = ['current_path', 'package_type', 'size', 'status', 'uuid', 'related_packages', 'misc_attributes']
+        fields = ['current_path', 'package_type', 'size', 'status', 'uuid',
+                  'related_packages', 'misc_attributes', 'replicated_package',
+                  'replicas']
         list_allowed_methods = ['get', 'post']
         detail_allowed_methods = ['get', 'put', 'patch']
         allowed_patch_fields = ['reingest']  # for customized update_in_place
@@ -515,35 +526,60 @@ class PackageResource(ModelResource):
         # Serialize JSONField as dict, not as repr of a dict
         return bundle.obj.misc_attributes
 
+    def dehydrate(self, bundle):
+        """Add an encrypted boolean key to the returned package indicating
+        whether it is encrypted.
+        """
+        encrypted = False
+        space = bundle.obj.current_location.space
+        if space.access_protocol == Space.GPG:
+            encrypted = True
+        bundle.data['encrypted'] = encrypted
+        return bundle
+
     def hydrate_current_location(self, bundle):
+        """Customize unserialization of current_location.
+
+        If current_location uses the default location form (i.e. if matches the
+        regular expression ``default_location_regex``), this method augments
+        its value by converting it into the absolute path of the location being
+        referenced, which is the expected form internally.
+
+        This method is invoked in Tastypie's hydrate cycle.
+
+        E.g.: ``/api/v2/location/default/DS/`` becomes:
+        ``/api/v2/location/363f42ea-905d-40f5-a2e8-1b6b9c122629/`` or similar.
+        """
         try:
             current_location = bundle.data['current_location']
         except KeyError:
             return bundle
         matches = self.default_location_regex.match(current_location)
-        LOGGER.debug("current_location=%s", current_location)
         try:
             purpose = matches.group('purpose')
         except AttributeError:
-            LOGGER.debug("attribute error")
+            LOGGER.debug("`current_location` was not matched by `default_location_regex`")
             return bundle
         try:
             name = 'default_{}_location'.format(purpose)
             uuid = Settings.objects.get(name=name).value
         except (Settings.DoesNotExist, KeyError):
-            LOGGER.debug("setting does not exist name = %s", name)
+            LOGGER.debug("`current_location` had the form of a default location (purpose %s) but the setting `%s` was not found", purpose, name)
             return bundle
 
-        a = reverse('api_dispatch_detail', kwargs={
+        location_path = reverse('api_dispatch_detail', kwargs={
             'api_name': 'v2',
             'resource_name': 'location',
             'uuid': uuid,
         })
-        LOGGER.debug("---> %s", a)
-        bundle.data['current_location'] = a
+        LOGGER.info("`current_location` was augmented: `%s`", location_path)
+        bundle.data['current_location'] = location_path
         return bundle
 
     def obj_create(self, bundle, **kwargs):
+        """Create a new Package model instance. Called when a POST request is
+        made to api/v2/file/.
+        """
         bundle = super(PackageResource, self).obj_create(bundle, **kwargs)
         related_package_uuid = bundle.data.get('related_package_uuid')
         # IDEA add custom endpoints, instead of storing all AIPS that come in?
@@ -552,7 +588,12 @@ class PackageResource(ModelResource):
         origin_path = bundle.data.get('origin_path')
         if bundle.obj.package_type in (Package.AIP, Package.AIC, Package.DIP) and bundle.obj.current_location.purpose in (Location.AIP_STORAGE, Location.DIP_STORAGE):
             # Store AIP/AIC
-            bundle.obj.store_aip(origin_location, origin_path, related_package_uuid)
+            events = bundle.data.get('events', [])
+            agents = bundle.data.get('agents', [])
+            aip_subtype = bundle.data.get('aip_subtype', None)
+            bundle.obj.store_aip(origin_location, origin_path,
+                                 related_package_uuid, premis_events=events,
+                                 premis_agents=agents, aip_subtype=aip_subtype)
         elif bundle.obj.package_type in (Package.TRANSFER,) and bundle.obj.current_location.purpose in (Location.BACKLOG,):
             # Move transfer to backlog
             bundle.obj.backlog_transfer(origin_location, origin_path)
@@ -595,6 +636,9 @@ class PackageResource(ModelResource):
             return bundle
         origin_location_uri = bundle.data.get('origin_location')
         origin_path = bundle.data.get('origin_path')
+        events = bundle.data.get('events', [])
+        agents = bundle.data.get('agents', [])
+        aip_subtype = bundle.data.get('aip_subtype', None)
         if origin_location_uri and origin_path:
             # Sending origin information implies that the package should be copied from there
             origin_location = self.origin_location.build_related_resource(origin_location_uri, bundle.request).obj
@@ -609,8 +653,10 @@ class PackageResource(ModelResource):
                 bundle.obj.current_location = original_package.current_location
                 reingest_location = self.origin_location.build_related_resource(bundle.data['current_location'], bundle.request).obj
                 reingest_path = bundle.data['current_path']
-                bundle.obj.finish_reingest(origin_location, origin_path,
-                    reingest_location, reingest_path)
+                bundle.obj.finish_reingest(
+                    origin_location, origin_path, reingest_location, reingest_path,
+                    premis_events=events, premis_agents=agents,
+                    aip_subtype=aip_subtype)
         return bundle
 
     def update_in_place(self, request, original_bundle, new_data):
@@ -649,7 +695,7 @@ class PackageResource(ModelResource):
             # This isn't configured by default
             site_url = getattr(settings, "SITE_BASE_URL", None)
             signals.deletion_request.send(sender=self, url=site_url,
-                uuid=package.uuid, location=package.full_path)
+                uuid=package.uuid, location=package.full_path, pipeline=request_info['pipeline'])
         else:
             response = {
                 'message': _('A deletion request already exists for this AIP.')
@@ -742,10 +788,8 @@ class PackageResource(ModelResource):
         """Return the entire Package to be downloaded."""
         # NOTE this responds to HEAD because AtoM uses HEAD to check for the existence of a package. The storage service has no way to check if the package still exists except by downloading it
         # TODO this needs to be fixed so that HEAD is not identical to GET
-
         # Get AIP details
         package = bundle.obj
-
         # Check if the package is in Arkivum and not actually there
         if package.current_location.space.access_protocol == Space.ARKIVUM:
             is_local = package.current_location.space.get_child_space().is_file_local(
@@ -758,16 +802,13 @@ class PackageResource(ModelResource):
             if is_local is None:
                 # Arkivum error, return 502
                 return http.HttpResponse(json.dumps({"error": True, "message": _("Error checking if file in Arkivum in locally available.")}), content_type='application/json', status=502)
-
         lockss_au_number = kwargs.get('chunk_number')
         try:
             temp_dir = None
             full_path = package.get_download_path(lockss_au_number)
         except StorageException:
             full_path, temp_dir = package.compress_package(utils.COMPRESSION_TAR)
-
         response = utils.download_file_stream(full_path)
-
         return response
 
     @_custom_endpoint(expected_methods=['get'])
@@ -791,60 +832,11 @@ class PackageResource(ModelResource):
         force_local = False
         if request.GET.get('force_local') in ('True', 'true', '1'):
             force_local = True
-        success, failures, message, timestamp = bundle.obj.check_fixity(force_local=force_local)
-
-        response = {
-            "success": success,
-            "message": message,
-            "failures": {
-                "files": {
-                    "missing": [],
-                    "changed": [],
-                    "untracked": [],
-                }
-            },
-            "timestamp": timestamp,
-        }
-
-        for failure in failures:
-            if isinstance(failure, bagit.FileMissing):
-                info = {
-                    "path": failure.path,
-                    "message": str(failure)
-                }
-                response["failures"]["files"]["missing"].append(info)
-            if isinstance(failure, bagit.ChecksumMismatch):
-                info = {
-                    "path": failure.path,
-                    "expected": failure.expected,
-                    "actual": failure.found,
-                    "hash_type": failure.algorithm,
-                    "message": str(failure),
-                }
-                response["failures"]["files"]["changed"].append(info)
-            if isinstance(failure, bagit.UnexpectedFile):
-                info = {
-                    "path": failure.path,
-                    "message": str(failure)
-                }
-                response["failures"]["files"]["untracked"].append(info)
-
-        report = json.dumps(response)
-        if success is False:
-            signals.failed_fixity_check.send(sender=self,
-                uuid=bundle.obj.uuid, location=bundle.obj.full_path,
-                report=report)
-        elif success is None:
-            signals.fixity_check_not_run.send(sender=self,
-                uuid=bundle.obj.uuid, location=bundle.obj.full_path,
-                report=report)
-        elif success is True:
-            signals.successful_fixity_check.send(sender=self,
-                uuid=bundle.obj.uuid, location=bundle.obj.full_path,
-                report=report)
-
+        report_json, report_dict = (
+            bundle.obj.get_fixity_check_report_send_signals(
+                force_local=force_local))
         return http.HttpResponse(
-            report,
+            report_json,
             content_type="application/json"
         )
 

@@ -46,6 +46,19 @@
         'directory_picker',
         '{% url "browse" "v2" "space" space.uuid %}'
       );
+
+      // Hide the "Replicators" field when the location being created is not an
+      // AIP Storage ("AS") location.
+      $('select#id_purpose').change(function(event) {replicatorsVisibility();});
+      function replicatorsVisibility() {
+        var purpose = $('select#id_purpose').val();
+        if (purpose === 'AS') {
+            $('select#id_replicators').closest('p').show();
+        } else {
+            $('select#id_replicators').closest('p').hide();
+        }
+      }
+      replicatorsVisibility();
     });
   </script>
 

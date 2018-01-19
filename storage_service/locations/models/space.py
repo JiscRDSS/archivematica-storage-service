@@ -136,6 +136,7 @@ class Space(models.Model):
     NFS = 'NFS'
     PIPELINE_LOCAL_FS = 'PIPE_FS'
     SWIFT = 'SWIFT'
+    GPG = 'GPG'
     OBJECT_STORAGE = {DATAVERSE, DSPACE, DURACLOUD, SWIFT}
     ACCESS_PROTOCOL_CHOICES = (
         (ARKIVUM, _l('Arkivum')),
@@ -143,6 +144,7 @@ class Space(models.Model):
         (DURACLOUD, _l('DuraCloud')),
         (DSPACE, _l('DSpace via SWORD2 API')),
         (FEDORA, _l("FEDORA via SWORD2")),
+        (GPG, _l("GPG encryption on Local Filesystem")),
         (LOCAL_FILESYSTEM, _l("Local Filesystem")),
         (LOM, _l("LOCKSS-o-matic")),
         (NFS, _l("NFS")),
@@ -346,7 +348,7 @@ class Space(models.Model):
         source_path, destination_path = self._move_from_path_mangling(source_path, destination_path)
         child_space = self.get_child_space()
         if hasattr(child_space, 'move_from_storage_service'):
-            child_space.move_from_storage_service(
+            return child_space.move_from_storage_service(
                 source_path, destination_path, *args, **kwargs)
         else:
             raise NotImplementedError(_('%(protocol)s space has not implemented %(method)s') % {'protocol': self.get_access_protocol_display(), 'method': 'move_from_storage_service'})
@@ -460,7 +462,9 @@ class Space(models.Model):
 
         # Rsync file over
         # TODO Do this asyncronously, with restarting failed attempts
-        command = ['rsync', '-t', '-O', '--protect-args', '-vv', '--chmod=ugo+rw', '-r', source, destination]
+        command = ['rsync', '-t', '-O', '--protect-args', '-vv',
+                   '--chmod=Fug+rw,o-rwx,Dug+rwx,o-rwx',
+                   '-r', source, destination]
         LOGGER.info("rsync command: %s", command)
         kwargs = {'stdout': subprocess.PIPE, 'stderr': subprocess.STDOUT}
         if assume_rsync_daemon:
@@ -530,7 +534,7 @@ class Space(models.Model):
         for directory in directories:
             path = os.path.join(os.path.dirname(directory), '')
             path = "{}@{}:{}".format(user, host, utils.coerce_str(path))
-            cmd = ['rsync', '-vv', '--protect-args', '--chmod=ugo+rw', '--recursive', temp_dir, path]
+            cmd = ['rsync', '-vv', '--protect-args', '--chmod=ug=rwx,o=rx', '--recursive', temp_dir, path]
             LOGGER.info("rsync path creation command: %s", cmd)
             try:
                 subprocess.check_call(cmd)
@@ -540,18 +544,6 @@ class Space(models.Model):
                 raise
 
         shutil.rmtree(temp_dir)
-
-    def _count_objects_in_directory(self, path):
-        """
-        Returns all the files in a directory, including children.
-        """
-        total_files = 0
-        for root, dirs, files in os.walk(path):
-            total_files += len(files)
-            # Limit the number of files counted to keep it from being too slow
-            if total_files > 5000:
-                return '5000+'
-        return total_files
 
     def browse_local(self, path):
         """
@@ -566,18 +558,7 @@ class Space(models.Model):
         if not os.path.exists(path):
             LOGGER.info('%s in %s does not exist', path, self)
             return {'directories': [], 'entries': [], 'properties': {}}
-        properties = {}
-        # Sorted list of all entries in directory, excluding hidden files
-        entries = [name for name in os.listdir(path) if name[0] != '.']
-        entries = sorted(entries, key=lambda s: s.lower())
-        directories = []
-        for name in entries:
-            full_path = os.path.join(path, name)
-            properties[name] = {'size': os.path.getsize(full_path)}
-            if os.path.isdir(full_path) and os.access(full_path, os.R_OK):
-                directories.append(name)
-                properties[name]['object count'] = self._count_objects_in_directory(full_path)
-        return {'directories': directories, 'entries': entries, 'properties': properties}
+        return path2browse_dict(path)
 
     def browse_rsync(self, path, ssh_key=None, assume_rsync_daemon=False, rsync_password=None):
         """
@@ -666,3 +647,39 @@ class Space(models.Model):
         except (os.error, shutil.Error):
             LOGGER.warning("Error deleting package %s", delete_path, exc_info=True)
             raise
+
+
+def path2browse_dict(path):
+    """Given a path on disk, return a dict with keys for directories, entries
+    and properties.
+    """
+    properties = {}
+    # Sorted list of all entries in directory, excluding hidden files
+    entries = [name for name in os.listdir(path) if name[0] != '.']
+    entries = sorted(entries, key=lambda s: s.lower())
+    directories = []
+    for name in entries:
+        full_path = os.path.join(path, name)
+        properties[name] = {'size': os.path.getsize(full_path)}
+        if utils.get_setting('object_counting_disabled', False):
+            properties[name]['object count'] = '0+'
+        elif os.path.isdir(full_path) and os.access(full_path, os.R_OK):
+            directories.append(name)
+            properties[name]['object count'] = count_objects_in_directory(
+                full_path)
+    return {'directories': directories,
+            'entries': entries,
+            'properties': properties}
+
+
+def count_objects_in_directory(path):
+    """
+    Returns all the files in a directory, including children.
+    """
+    total_files = 0
+    for root, dirs, files in os.walk(path):
+        total_files += len(files)
+        # Limit the number of files counted to keep it from being too slow
+        if total_files > 5000:
+            return '5000+'
+    return total_files

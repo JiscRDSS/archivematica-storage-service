@@ -206,3 +206,15 @@ class UserChangeForm(auth.forms.UserChangeForm):
     class Meta:
         model = auth.get_user_model()
         fields = ('username', 'first_name', 'last_name', 'email', 'is_superuser')
+
+
+# ######################### KEYS ##########################
+
+class KeyCreateForm(forms.Form):
+    required_css_class = 'required-field'
+    name_real = forms.CharField(label=_l('Name'))
+    name_email = forms.EmailField(label=_l('Email'), required=False)
+
+
+class KeyImportForm(forms.Form):
+    ascii_armor = forms.CharField(widget=forms.Textarea)

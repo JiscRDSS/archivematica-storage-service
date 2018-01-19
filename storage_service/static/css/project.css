@@ -53,3 +53,10 @@ table.attr-val-table td {
   font-weight: bold;
 }
 
+label.required-field:after {
+    content: '*'
+}
+
+.errorlist {
+  color: red;
+}

@@ -1,11 +1,12 @@
 # flake8: noqa
 
 """Production settings and globals."""
+
 from __future__ import absolute_import
 
-from os import environ
+import dj_database_url
 
-from .base import *  # noqa: F401, F403
+from .base import *
 
 
 # ######## DATABASE CONFIGURATION
@@ -31,6 +32,7 @@ else:
 # https://docs.djangoproject.com/en/1.5/releases/1.5/#allowed-hosts-required-in-production
 ALLOWED_HOSTS = get_env_variable('DJANGO_ALLOWED_HOSTS').split(',')
 # ######## END HOST CONFIGURATION
+
 
 # ######## EMAIL CONFIGURATION
 
@@ -63,8 +65,6 @@ DEFAULT_FROM_EMAIL = environ.get('DEFAULT_FROM_EMAIL', 'webmaster@example.com')
 EMAIL_SUBJECT_PREFIX = environ.get('EMAIL_SUBJECT_PREFIX', '[Archivematica Storage Service] ')
 EMAIL_TIMEOUT = to_int(environ.get('EMAIL_TIMEOUT'))
 SERVER_EMAIL = environ.get('SERVER_EMAIL', EMAIL_HOST_USER)
-
-
 # ######## END EMAIL CONFIGURATION
 
 

@@ -2,8 +2,11 @@
 
 """Common settings and globals."""
 
+import json
+import logging
+import logging.config
 from os import environ
-from os.path import abspath, basename, dirname, join, normpath
+from os.path import abspath, basename, dirname, isfile, join, normpath
 from sys import path
 
 import dj_database_url
@@ -90,6 +93,7 @@ LANGUAGES = [
     ('fr', _('French')),
     ('en', _('English')),
     ('es', _('Spanish')),
+    ('pt', _('Portuguese')),
 ]
 # ######## END LOCALE CONFIGURATION
 
@@ -110,12 +114,14 @@ STATIC_ROOT = normpath(join(SITE_ROOT, 'assets'))
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#static-url
 STATIC_URL = '/static/'
 
-# See: https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#std:setting-STATICFILES_DIRS
+# See:
+# https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#std:setting-STATICFILES_DIRS
 STATICFILES_DIRS = (
     normpath(join(SITE_ROOT, 'static')),
 )
 
-# See: https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#staticfiles-finders
+# See:
+# https://docs.djangoproject.com/en/dev/ref/contrib/staticfiles/#staticfiles-finders
 STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
@@ -139,7 +145,8 @@ ALLOWED_HOSTS = ['*']
 
 
 # ######## FIXTURE CONFIGURATION
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-FIXTURE_DIRS
+# See:
+# https://docs.djangoproject.com/en/dev/ref/settings/#std:setting-FIXTURE_DIRS
 FIXTURE_DIRS = (
     normpath(join(SITE_ROOT, 'fixtures')),
 )
@@ -187,7 +194,12 @@ MIDDLEWARE_CLASSES = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+
+    # Automatic language selection is disabled.
+    # See #723 for more details.
+    'common.middleware.ForceDefaultLanguageMiddleware',
     'django.middleware.locale.LocaleMiddleware',
+
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -253,12 +265,16 @@ LOGIN_EXEMPT_URLS = (
 
 
 # ######## LOGGING CONFIGURATION
-# See: https://docs.djangoproject.com/en/dev/ref/settings/#logging
-# A sample logging configuration. The only tangible logging
-# performed by this configuration is to send an email to
-# the site admins on every HTTP 500 error when DEBUG=False.
 # See http://docs.djangoproject.com/en/dev/topics/logging for
 # more details on how to customize your logging configuration.
+
+# Configure logging manually
+LOGGING_CONFIG = None
+
+# Location of the logging configuration file that we're going to pass to
+# `logging.config.fileConfig` unless it doesn't exist.
+LOGGING_CONFIG_FILE = '/etc/archivematica/storageService.logging.json'
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -319,6 +335,12 @@ LOGGING = {
         'level': 'WARNING',
     },
 }
+
+if isfile(LOGGING_CONFIG_FILE):
+    with open(LOGGING_CONFIG_FILE, 'rt') as f:
+        LOGGING = logging.config.dictConfig(json.load(f))
+else:
+    logging.config.dictConfig(LOGGING)
 # ######## END LOGGING CONFIGURATION
 
 
@@ -349,6 +371,7 @@ def to_int(env_str):
         return int(env_str)
     except (TypeError, ValueError):
         return None
+
 
 SHIBBOLETH_AUTHENTICATION = is_true(environ.get('SS_SHIBBOLETH_AUTHENTICATION', ''))
 if SHIBBOLETH_AUTHENTICATION:
@@ -398,6 +421,8 @@ try:
         environ.get('SS_BAG_VALIDATION_NO_PROCESSES', 1))
 except ValueError:
     BAG_VALIDATION_NO_PROCESSES = 1
+
+GNUPG_HOME_PATH = environ.get('SS_GNUPG_HOME_PATH', None)
 
 # SS uses a Python HTTP library called requests. If this setting is set to True,
 # we will skip the SSL certificate verification process. Read more here:

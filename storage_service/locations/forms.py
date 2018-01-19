@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+import logging
 
 from django import forms
 import django.utils
@@ -6,7 +7,11 @@ import django.core.exceptions
 from django.db.models import Count
 from django.utils.translation import ugettext as _, ugettext_lazy as _l
 
+from common import gpgutils
 from locations import models
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 # CUSTOM WIDGETS
@@ -119,6 +124,25 @@ class DSpaceForm(forms.ModelForm):
         fields = ('sd_iri', 'user', 'password', 'metadata_policy', 'archive_format')
 
 
+def get_gpg_key_choices():
+    return [(key['fingerprint'], ', '.join(key['uids']))
+            for key in gpgutils.get_gpg_key_list()]
+
+
+class GPGForm(forms.ModelForm):
+
+    def __init__(self, *args, **kwargs):
+        super(GPGForm, self).__init__(*args, **kwargs)
+        system_key = gpgutils.get_default_gpg_key(gpgutils.get_gpg_key_list())
+        self.fields['key'] = forms.ChoiceField(
+            choices=get_gpg_key_choices(),
+            initial=system_key['fingerprint'])
+
+    class Meta:
+        model = models.GPG
+        fields = ('key',)
+
+
 class LocalFilesystemForm(forms.ModelForm):
     class Meta:
         model = models.LocalFilesystem
@@ -163,11 +187,19 @@ class SwiftForm(forms.ModelForm):
 
 
 class LocationForm(forms.ModelForm):
-    default = forms.BooleanField(required=False)
+    default = forms.BooleanField(required=False, label=_l("Set as global default location for its purpose"))
 
     class Meta:
         model = models.Location
-        fields = ('purpose', 'pipeline', 'relative_path', 'description', 'quota', 'enabled', 'default')
+        fields = ('purpose',
+                  'pipeline',
+                  'relative_path',
+                  'description',
+                  'quota',
+                  'enabled',
+                  'default',
+                  'replicators')
+
         widgets = {
             'purpose': DisableableSelectWidget(),
         }
@@ -189,6 +221,14 @@ class LocationForm(forms.ModelForm):
             self.whitelist = all_
         blacklist = all_ - set(self.whitelist)
         self.fields['purpose'].widget.disabled_choices = blacklist
+        # A possible replicator for a Location is any RP-purposed location
+        # other than the current one.
+        replicator_choices = models.Location.objects.filter(
+            enabled=True, purpose=models.Location.REPLICATOR).all()
+        instance_uuid = getattr(kwargs.get('instance'), 'uuid', None)
+        self.fields['replicators'].widget.choices = [
+            (repl_loc.id, str(repl_loc)) for repl_loc in replicator_choices
+            if repl_loc.uuid != instance_uuid]
         # Associated with all enabled pipelines by default
         self.fields['pipeline'].initial = models.Pipeline.active.values_list('pk', flat=True)
         self.fields['default'].initial = self.instance.default
@@ -196,6 +236,13 @@ class LocationForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super(LocationForm, self).clean()
         purpose = cleaned_data.get('purpose')
+
+        # Only AIP Storage AS-purposed locations can have replicators
+        replicators = cleaned_data.get('replicators')
+        if purpose != models.Location.AIP_STORAGE and replicators:
+            raise forms.ValidationError(
+                _('Only AIP storage locations can have replicators'))
+
         if purpose == models.Location.AIP_RECOVERY:
             # Don't allow more than one recovery location per pipeline
             # Fetch all LocationPipelines linked to an AIP Recovery location and

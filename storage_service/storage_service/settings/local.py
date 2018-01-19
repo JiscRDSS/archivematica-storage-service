@@ -1,16 +1,20 @@
 # flake8: noqa
 
 """Development settings and globals."""
+
 from __future__ import absolute_import
 
-from .base import *  # noqa: F401, F403
+import dj_database_url
+
+from .base import *
 
 
 # ######## DATABASE CONFIGURATION
 # See: https://docs.djangoproject.com/en/dev/ref/settings/#databases
 DATABASES = {}
 if 'SS_DB_URL' in environ:
-    DATABASES['default'] = dj_database_url.config(env='SS_DB_URL', conn_max_age=600)
+    DATABASES['default'] = dj_database_url.config(
+        env='SS_DB_URL', conn_max_age=600)
 else:
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',  # Add 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
