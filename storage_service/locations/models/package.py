@@ -847,13 +847,14 @@ class Package(models.Model):
         for replication validation or does a fixity check need to be performed
         also?
         """
-
         # 1. Set attrs and get full path to pointer file.
-        should_have_pointer = replica_package.should_have_pointer_file()
         if not master_ptr:
             master_ptr = self.get_pointer_instance()
-        if not should_have_pointer or not master_ptr:
-            return
+        if not master_ptr:
+            LOGGER.warning('Not creating a pointer file for replica package %s'
+                           ' because its master package does not have one.',
+                           replica_package.uuid)
+            return None
         uuid_path = utils.uuid_to_path(replica_package.uuid)
         replica_package.pointer_file_location = Location.active.get(
             purpose=Location.STORAGE_SERVICE_INTERNAL)
@@ -1378,13 +1379,13 @@ class Package(models.Model):
             if algorithm == utils.COMPRESSION_TAR_BZIP2:
                 algo = '-j'  # Compress with bzip2
                 compressed_filename += '.bz2'
-            command = [
+            command = list(filter(None, [
                 'tar', 'c',  # Create tar
                 algo,  # Optional compression flag
                 '-C', relative_path,  # Work in this directory
                 '-f', compressed_filename,  # Output file
                 os.path.basename(full_path),   # Relative path to source files
-            ]
+            ]))
         elif algorithm in (utils.COMPRESSION_7Z_BZIP, utils.COMPRESSION_7Z_LZMA):
             compressed_filename = os.path.join(extract_path, basename + '.7z')
             if algorithm == utils.COMPRESSION_7Z_BZIP:
